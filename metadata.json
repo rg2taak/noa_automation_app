@@ -1,0 +1,7 @@
+{
+  "name": "Noa Amusement Park Automation",
+  "description": "A comprehensive automation system for Noa Amusement Park featuring dark/light mode, multi-language support (FA/EN), and role-based access control.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
