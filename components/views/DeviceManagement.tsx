@@ -4,7 +4,7 @@ import { Search, Download, Edit2, Trash2, CheckCircle2, XCircle, AlertTriangle, 
 import { ExtendedTranslationStrings } from '../../translations';
 
 interface Device {
-  id: number;
+  id: string | number;
   name: string;
   price: string;
   type: 'deductive' | 'timed' | 'timedList';
@@ -19,7 +19,7 @@ interface DeviceManagementProps {
   setSearch: (s: string) => void;
   devices: Device[];
   onEdit: (d: Device) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: string | number) => void;
 }
 
 const DeviceManagement: React.FC<DeviceManagementProps> = ({ t, isRtl, search, setSearch, devices, onEdit, onDelete }) => {

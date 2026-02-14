@@ -4,7 +4,7 @@ import { X, Save, User, Mail, Smartphone, ShieldCheck, Lock, AlertCircle } from 
 import { ExtendedTranslationStrings } from '../../translations';
 
 interface Customer {
-  id?: number;
+  id?: string | number;
   name: string;
   email: string;
   phone: string;

@@ -8,6 +8,8 @@ import { Activity, ArrowLeft, User as UserIcon, Shield, RefreshCw, AlertTriangle
 import categoryService from '../services/categoryService';
 import gameService from '../services/gameService';
 import customerService from '../services/customerService';
+import deviceService from '../services/deviceService';
+import orderService from '../services/orderService';
 
 // Modular Layout Components
 import Sidebar from './Sidebar';
@@ -69,6 +71,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [games, setGames] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [staffUsers, setStaffUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [giftPackages, setGiftPackages] = useState<GiftPackage[]>([]);
@@ -102,6 +105,41 @@ const Dashboard: React.FC<DashboardProps> = ({
   const profileRef = useRef<HTMLDivElement>(null);
   const isRtl = lang === 'fa';
 
+  const toCustomerViewModel = (userData: any, totalSpent = 0) => {
+    const firstName = userData?.profile?.firstName || '';
+    const lastName = userData?.profile?.lastName || '';
+    const fullName = `${firstName} ${lastName}`.trim();
+    return {
+      id: userData.id,
+      name: fullName || userData.username || 'Customer',
+      email: userData?.profile?.email || '',
+      phone: userData?.profile?.mobile || userData.username || '',
+      totalSpent: String(totalSpent),
+    };
+  };
+
+  const toUserPayload = (customer: any, includePassword: boolean) => {
+    const nameParts = String(customer.name || '').trim().split(/\s+/).filter(Boolean);
+    const firstName = nameParts[0] || customer.phone || 'Customer';
+    const lastName = nameParts.slice(1).join(' ') || '-';
+    const payload: any = {
+      username: customer.phone,
+      profile: {
+        firstName,
+        lastName,
+        email: customer.email || `user-${Date.now()}@playland.local`,
+        mobile: customer.phone,
+      },
+    };
+    if (includePassword) {
+      payload.password =
+        customer.password && customer.password.length >= 8
+          ? customer.password
+          : 'ChangeMe123';
+    }
+    return payload;
+  };
+
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
@@ -114,11 +152,52 @@ const Dashboard: React.FC<DashboardProps> = ({
       ]);
       setCategories(catsRes.data);
       setGames(gamesRes.data);
+
+      try {
+        const devicesRes = await deviceService.getAll();
+        const normalizedDevices = (devicesRes.data || []).map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          price: d.price ?? '0',
+          type: d.type === 'DECREMENTAL' ? 'deductive' : d.type === 'TIME_LIST' ? 'timedList' : 'timed',
+          useGift: Boolean(d.allowGift),
+          status: d.status === 'ACTIVE' ? 'active' : 'offline',
+          deviceTime: String(d.time ?? ''),
+          alarmTime: String(d.endTimeAlarm ?? ''),
+          interCardInterval: String(d.stopNextCards ?? '0'),
+        }));
+        setDevices(normalizedDevices);
+      } catch (e) {
+        console.warn('Device Service endpoint not available');
+      }
       
       try {
         const customersRes = await customerService.getAll();
-        setCustomers(customersRes.data);
+        const normalizedCustomers = (customersRes.data || []).map((u: any) =>
+          toCustomerViewModel(u, 0),
+        );
+        setCustomers(normalizedCustomers);
       } catch(e) { console.warn('Customer Service endpoint not available'); }
+
+      try {
+        const customerTotals: Record<string, number> = {};
+        const ordersRes = await orderService.getAll();
+        const ordersData = ordersRes.data || [];
+        setOrders(ordersData);
+        ordersData.forEach((order: any) => {
+          const key = String(order.userId);
+          customerTotals[key] =
+            (customerTotals[key] || 0) + Number(order.totalPaidAmount || 0);
+        });
+        setCustomers((prev) =>
+          prev.map((c) => ({
+            ...c,
+            totalSpent: String(customerTotals[String(c.id)] || 0),
+          })),
+        );
+      } catch (e) {
+        console.warn('Order Service endpoint not available');
+      }
     } catch (err) {
       console.warn('Network Error or Server Down - Switching to Demo Mode');
       setIsDemoMode(true);
@@ -140,7 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveCategory = async (cat: any) => {
     try {
       if (editingCategory) {
-        const res = await categoryService.update(editingCategory.id, cat);
+        const res = await categoryService.update(String(editingCategory.id), cat);
         setCategories(categories.map(c => c.id === editingCategory.id ? res.data : c));
       } else {
         const res = await categoryService.create(cat);
@@ -155,9 +234,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleDeleteCategory = async (id: number) => {
+  const handleDeleteCategory = async (id: string | number) => {
     try {
-      await categoryService.delete(id);
+      await categoryService.delete(String(id));
       setCategories(prev => prev.filter(c => c.id !== id));
     } catch (err) {
       if (isDemoMode) setCategories(prev => prev.filter(c => c.id !== id));
@@ -168,7 +247,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveGame = async (game: any) => {
     try {
       if (editingGame) {
-        const res = await gameService.update(editingGame.id, game);
+        const res = await gameService.update(String(editingGame.id), game);
         setGames(games.map(g => g.id === editingGame.id ? res.data : g));
       } else {
         const res = await gameService.create(game);
@@ -183,9 +262,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleDeleteGame = async (id: number) => {
+  const handleDeleteGame = async (id: string | number) => {
     try {
-      await gameService.delete(id);
+      await gameService.delete(String(id));
       setGames(prev => prev.filter(g => g.id !== id));
     } catch (err) {
       if (isDemoMode) setGames(prev => prev.filter(g => g.id !== id));
@@ -196,11 +275,22 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveCustomer = async (customer: any) => {
     try {
       if (editingCustomer) {
-        const res = await customerService.update(editingCustomer.id, customer);
-        setCustomers(customers.map(c => c.id === editingCustomer.id ? res.data : c));
+        const payload = toUserPayload(customer, false);
+        const res = await customerService.update(String(editingCustomer.id), payload);
+        if (customer.password && customer.password.length >= 8) {
+          await customerService.setPassword(String(editingCustomer.id), {
+            password: customer.password,
+          });
+        }
+        const updated = toCustomerViewModel(
+          { ...res.data, id: editingCustomer.id },
+          Number(editingCustomer.totalSpent || 0),
+        );
+        setCustomers(customers.map(c => c.id === editingCustomer.id ? updated : c));
       } else {
-        const res = await customerService.create(customer);
-        setCustomers([...customers, res.data]);
+        const payload = toUserPayload(customer, true);
+        const res = await customerService.create(payload);
+        setCustomers([...customers, toCustomerViewModel(res.data, 0)]);
       }
       setIsCustomerModalOpen(false);
     } catch (err) {
@@ -211,9 +301,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleDeleteCustomer = async (id: number) => {
+  const handleDeleteCustomer = async (id: string | number) => {
     try {
-      await customerService.delete(id);
+      await customerService.delete(String(id));
       setCustomers(prev => prev.filter(c => c.id !== id));
     } catch (err) {
       if (isDemoMode) setCustomers(prev => prev.filter(c => c.id !== id));
@@ -249,7 +339,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="max-w-7xl mx-auto">
             {activeTab === 'dashboard' && <AdminDashboard t={t} isRtl={isRtl} onNavigate={setActiveTab} isLoading={isLoading} />}
             {activeTab === 'customer_view' && <CustomerDashboard t={t} isRtl={isRtl} userName={user.name} />}
-            {activeTab === 'devices' && <DeviceManagement t={t} isRtl={isRtl} search={deviceSearch} setSearch={setDeviceSearch} devices={devices} onEdit={(d) => { setEditingDevice(d); setIsEditDeviceModalOpen(true); }} onDelete={(id) => setDevices(prev => prev.filter(d => d.id !== id))} />}
+            {activeTab === 'devices' && <DeviceManagement t={t} isRtl={isRtl} search={deviceSearch} setSearch={setDeviceSearch} devices={devices} onEdit={(d) => { setEditingDevice(d); setIsEditDeviceModalOpen(true); }} onDelete={async (id) => {
+              try {
+                await deviceService.delete(String(id));
+                setDevices(prev => prev.filter(d => d.id !== id));
+              } catch (err) {
+                if (isDemoMode) setDevices(prev => prev.filter(d => d.id !== id));
+              }
+            }} />}
             {activeTab === 'games_cat' && (
               <GameAndCategoryManagement 
                 t={t} isRtl={isRtl} search={gamesCatSearch} setSearch={setGamesCatSearch} 
@@ -268,7 +365,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             {activeTab === 'customers' && <CustomerManagement t={t} isRtl={isRtl} search={customerSearch} setSearch={setCustomerSearch} customers={customers} onAdd={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }} onEdit={(c) => { setEditingCustomer(c); setIsCustomerModalOpen(true); }} onView={(c) => { setViewingCustomerDetail(c); setActiveTab('customer_detail'); }} onViewPurchases={(c) => { setViewingPurchasesCustomer(c); setIsPurchasesModalOpen(true); }} onDelete={handleDeleteCustomer} />}
             {activeTab === 'customer_detail' && viewingCustomerDetail && <CustomerDetailView customer={viewingCustomerDetail} t={t} isRtl={isRtl} onBack={() => setActiveTab('customers')} />}
             {activeTab === 'staff' && <StaffManagement t={t} isRtl={isRtl} users={staffUsers} groups={groups} onAddUser={() => { setEditingStaffUser(null); setIsStaffModalOpen(true); }} onEditUser={(u) => { setEditingStaffUser(u); setIsStaffModalOpen(true); }} onAddGroup={() => { setEditingGroup(null); setIsGroupModalOpen(true); }} onEditGroup={(g) => { setEditingGroup(g); setIsGroupModalOpen(true); }} />}
-            {activeTab === 'sales_report' && <SalesReport t={t} isRtl={isRtl} />}
+            {activeTab === 'sales_report' && <SalesReport t={t} isRtl={isRtl} orders={orders} />}
             {activeTab === 'device_report' && <DeviceReport t={t} isRtl={isRtl} />}
             {activeTab === 'game_sales_report' && <GameSalesReport t={t} isRtl={isRtl} />}
             {activeTab === 'category_sales_report' && <CategorySalesReport t={t} isRtl={isRtl} />}

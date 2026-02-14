@@ -4,7 +4,7 @@ import { Search, Plus, Download, Edit2, Trash2, User, Mail, Smartphone, Shopping
 import { ExtendedTranslationStrings } from '../../translations';
 
 interface CustomerRecord {
-  id: number;
+  id: string | number;
   name: string;
   email: string;
   phone: string;
@@ -21,7 +21,7 @@ interface CustomerManagementProps {
   onEdit: (customer: CustomerRecord) => void;
   onView: (customer: CustomerRecord) => void;
   onViewPurchases: (customer: CustomerRecord) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: string | number) => void;
 }
 
 const CustomerManagement: React.FC<CustomerManagementProps> = ({ 

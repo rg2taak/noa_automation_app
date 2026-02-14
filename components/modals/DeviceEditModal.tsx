@@ -4,7 +4,7 @@ import { X, Edit2, Save, Gamepad2, Wallet, Layers, Activity, Clock, Bell, Shield
 import { ExtendedTranslationStrings } from '../../translations';
 
 interface Device {
-  id: number;
+  id: string | number;
   name: string;
   price: string;
   type: 'deductive' | 'timed' | 'timedList';
